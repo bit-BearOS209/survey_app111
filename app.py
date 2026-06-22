@@ -6,19 +6,36 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# 1. Инициализация Firebase (выполняется один раз за сессию)
-KEY_PATH = os.getenv("FIREBASE_KEY", "serviceAccountKey.json")
-
+# =====================================================================
+# 1. ИСПРАВЛЕННАЯ ИНИЦИАЛИЗАЦИЯ FIREBASE (Работает и дома, и в облаке)
+# =====================================================================
 if not firebase_admin._apps:
-    if not os.path.exists(KEY_PATH):
-        st.error(
-            "Ошибка: Файл serviceAccountKey.json не найден в корневой директории."
-        )
+    # Вариант А: Если приложение запущено на сервере Streamlit Cloud
+    if "firebase" in st.secrets:
+        # Превращаем TOML-секреты обратно в словарь (JSON) в памяти
+        firebase_config = dict(st.secrets["firebase"])
+
+        # КРИТИЧЕСКИЙ МОМЕНТ: чиним символы переноса строки в приватном ключе
+        if "private_key" in firebase_config:
+            firebase_config["private_key"] = firebase_config["private_key"].replace("\\n", "\n")
+
+        # Передаем конфигурацию напрямую из памяти, без создания файлов на диске
+        cred = credentials.Certificate(firebase_config)
+        firebase_admin.initialize_app(cred)
+
+    # Вариант Б: Если ты запускаешь проект локально на компьютере в PyCharm
+    elif os.path.exists("serviceAccountKey.json"):
+        cred = credentials.Certificate("serviceAccountKey.json")
+        firebase_admin.initialize_app(cred)
+
+    # Вариант В: Забыли прописать секреты и файла тоже нет
+    else:
+        st.error("Ошибка: Конфигурация Firebase не найдена ни в Secrets, ни в локальном JSON-файле.")
         st.stop()
-    cred = credentials.Certificate(KEY_PATH)
-    firebase_admin.initialize_app(cred)
 
 db = firestore.client()
+# =====================================================================
+
 
 # 2. Настройка конфигурации страницы
 st.set_page_config(
