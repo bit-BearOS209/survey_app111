@@ -1,121 +1,293 @@
-import streamlit as st
+from datetime import datetime
+import os
 import firebase_admin
 from firebase_admin import credentials, firestore
-import uuid
-from datetime import datetime
+import pandas as pd
+import plotly.express as px
+import streamlit as st
 
-# ==========================================
-# ИНИЦИАЛИЗАЦИЯ FIREBASE (ИСПРАВЛЕННЫЙ ВАРИАНТ)
-# ==========================================
+# 1. Инициализация Firebase
+KEY_PATH = os.getenv("FIREBASE_KEY", "serviceAccountKey.json")
+
 if not firebase_admin._apps:
-    firebase_config = {
-        "type": st.secrets["firebase"]["type"],
-        "project_id": st.secrets["firebase"]["project_id"],
-        "private_key_id": st.secrets["firebase"]["private_key_id"],
-        # Очистка экранирования для исключения ошибки Invalid JWT Signature
-        "private_key": st.secrets["firebase"]["private_key"].replace("\\n", "\n"),
-        "client_email": st.secrets["firebase"]["client_email"],
-        "client_id": st.secrets["firebase"]["client_id"],
-        "auth_uri": st.secrets["firebase"]["auth_uri"],
-        "token_uri": st.secrets["firebase"]["token_uri"],
-        "auth_provider_x509_cert_url": st.secrets["firebase"]["auth_provider_x509_cert_url"],
-        "client_x509_cert_url": st.secrets["firebase"]["client_x509_cert_url"],
-        "universe_domain": st.secrets["firebase"]["universe_domain"]
-    }
-
-    cred = credentials.Certificate(firebase_config)
+    if not os.path.exists(KEY_PATH):
+        st.error(
+            "Ошибка: Файл serviceAccountKey.json не найден в папке приложения."
+        )
+        st.stop()
+    cred = credentials.Certificate(KEY_PATH)
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 
-# ==========================================
-# НАСТРОЙКА ИНТЕРФЕЙСА
-# ==========================================
-st.set_page_config(page_title="Большой опросник", page_icon="📝", layout="centered")
+# 2. Конфигурация страницы Streamlit
+st.set_page_config(
+    page_title="Большое исследование: Облачные заметки",
+    layout="wide",
+    page_icon="📝",
+)
 
-st.title("📝 Тестирование / Анкета из 22 вопросов")
-st.write("Пожалуйста, ответьте на все вопросы честно и внимательно.")
+st.title("📝 Комплексное исследование: Экосистема облачных заметок")
+st.markdown(
+    "Уважаемый участник! Пожалуйста, ответьте на вопросы масштабного исследования. "
+    "Анкета содержит 22 вопроса и детально изучает метрики синхронизации, совместной работы и безопасности."
+)
 
-if "user_id" not in st.session_state:
-    st.session_state["user_id"] = str(uuid.uuid4())
+# Разделяем интерфейс: Слева — огромная анкета, Справа — мощный Дашборд
+col_form, col_dash = st.columns([1, 1])
 
-# ==========================================
-# ПОЛЯ ПРОФИЛЯ
-# ==========================================
-st.subheader("📋 Личные данные")
-name = st.text_input("Как вас зовут?", key="user_name")
-age = st.number_input("Сколько вам лет?", min_value=1, max_value=120, value=18, key="user_age")
+# --- ЛЕВАЯ КОЛОНКА: АНКЕТА (22 ВОПРОСА) ---
+with col_form:
+    st.subheader("📋 Анкета респондента")
 
-st.markdown("---")
+    with st.form("mega_survey_form", clear_on_submit=True):
 
-# ==========================================
-# ПОЛНЫЙ БЛОК ИЗ 22 ВОПРОСОВ
-# ==========================================
-st.subheader("❓ Вопросы")
+        # === БЛОК 1: ДЕМОГРАФИЯ И ОБЩИЕ ДАННЫЕ (Вопросы 1-5) ===
+        st.markdown("### 👤 Часть 1: Профиль пользователя")
+        q1_city = st.text_input(
+            "1. Укажите ваш город (Обязательно):", placeholder="Казань"
+        ).strip()
+        q2_age = st.number_input(
+            "2. Укажите ваш возраст:", min_value=14, max_value=100, value=20
+        )
+        q3_occupation = st.selectbox(
+            "3. Ваш основной род деятельности:",
+            ["Студент", "Работаю в IT", "Работаю в другой сфере", "Фрилансер"],
+        )
+        q4_primary_app = st.selectbox(
+            "4. Какое приложение для заметок у вас основное?",
+            [
+                "Notion",
+                "Google Keep",
+                "Apple Notes",
+                "Obsidian",
+                "Яндекс Заметки",
+                "Microsoft OneNote",
+                "Другое",
+            ],
+        )
+        q5_experience = st.radio(
+            "5. Как долго вы пользуетесь облачными заметками?",
+            ["Меньше года", "1–2 года", "Более 3 лет"],
+        )
 
-q1 = st.radio("1. Какой ваш любимый цвет?", ["Красный", "Синий", "Зеленый", "Другой"], key="q1")
-q2 = st.selectbox("2. Какое ваше любимое время года?", ["Весна", "Лето", "Осень", "Зима"], key="q2")
-q3 = st.multiselect("3. Что вы предпочитаете на завтрак?", ["Кофе", "Чай", "Яичница", "Каша", "Фрукты"], key="q3")
-q4 = st.slider("4. Оцените ваш уровень энергии сегодня (от 1 до 10)", 1, 10, 5, key="q4")
-q5 = st.radio("5. Какой тип отдыха вы предпочитаете?",
-              ["Активный (спорт, походы)", "Пассивный (пляж, книги)", "Культурный (музеи, театры)"], key="q5")
-q6 = st.selectbox("6. Какая операционная система вам ближе?", ["Android", "iOS", "Windows", "Linux / macOS"], key="q6")
-q7 = st.radio("7. Любите ли вы программирование?", ["Да, очень", "Только учусь", "Это просто работа / учеба", "Нет"],
-              key="q7")
-q8 = st.slider("8. Сколько часов в день вы проводите за компьютером?", 1, 24, 8, key="q8")
-q9 = st.selectbox("9. Какой жанр кино вам нравится больше всего?",
-                  ["Фантастика / Экшен", "Драма / Мелодрама", "Комедия", "Ужасы / Триллер"], key="q9")
-q10 = st.radio("10. Как вы относитесь к командной работе?",
-               ["Предпочитаю работать один", "Комфортно в небольшой команде", "Люблю большие проекты"], key="q10")
-q11 = st.text_input("11. Опишите кратко ваш идеальный день:", key="q11")
-q12 = st.radio("12. Что для вас важнее в работе?",
-               ["Интересные задачи", "Высокая зарплата", "Гибкий график / удаленка", "Хороший коллектив"], key="q12")
-q13 = st.selectbox("13. Как часто вы занимаетесь спортом или физической активностью?",
-                   ["Каждый день", "2-3 раза в неделю", "Раз в неделю", "Редко / Не занимаюсь"], key="q13")
-q14 = st.slider("14. Оцените ваш уровень стресса за последнюю неделю (от 1 до 10)", 1, 10, 5, key="q14")
-q15 = st.radio("15. Какую музыку вы предпочитаете во время работы/учебы?",
-               ["Поп / Рок", "Лоу-фай / Инструментальная", "Фоновый шум / Тишина", "Электронная"], key="q15")
-q16 = st.selectbox("16. Какой ваш основной язык программирования на данный момент?",
-                   ["Python", "C++", "Java", "JavaScript / Другой"], key="q16")
-q17 = st.radio("17. Хотели бы вы в будущем сменить место жительства / переехать?",
-               ["Да, определенно", "Пока не думал(а) об этом", "Нет, меня всё устраивает"], key="q17")
-q18 = st.slider("18. Насколько вы довольны своей текущей успеваемостью или продуктивностью? (от 1 до 10)", 1, 10, 7,
-                key="q18")
-q19 = st.text_input("19. Какая ваша главная профессиональная цель на этот год?", key="q19")
-q20 = st.radio("20. Вы предпочитаете бумажные книги или электронные/аудиоформаты?",
-               ["Бумажные", "Электронные", "Аудиокниги", "Редко читаю книги"], key="q20")
-q21 = st.selectbox("21. Какой формат обучения вам кажется наиболее эффективным?",
-                   ["Очные лекции и практика", "Онлайн-курсы в записи", "Самостоятельное чтение документации"],
-                   key="q21")
-q22 = st.text_area("22. Ваши пожелания или дополнительные комментарии к анкете:", key="q22")
+        st.markdown("---")
 
-st.markdown("---")
+        # === БЛОК 2: МЕТРИКА «СИНХРОНИЗАЦИЯ И ДОСТУПНОСТЬ» (Вопросы 6-11) ===
+        st.markdown("### 🔄 Часть 2: Метрика «Синхронизация»")
+        q6_frequency = st.select_slider(
+            "6. Как часто вы открываете заметки?",
+            options=[
+                "Редко (раз в месяц)",
+                "Пару раз в неделю",
+                "Каждый день",
+                "Несколько раз в день",
+            ],
+        )
+        q7_devices = st.slider(
+            "7. На скольких устройствах у вас настроены заметки? (кол-во)",
+            1,
+            5,
+            2,
+        )
+        q8_offline = st.radio(
+            "8. Нужен ли вам доступ к заметкам без интернета (офлайн)?",
+            ["Да, это критично", "Иногда нужен", "Нет, интернет есть всегда"],
+        )
+        q9_sync_speed = st.slider(
+            "9. Оцените скорость синхронизации в вашем приложении (1 — очень медленно, 10 — мгновенно):",
+            1,
+            10,
+            8,
+        )
+        q10_sync_errors = st.radio(
+            "10. Сталкивались ли вы с потерей данных из-за ошибок синхронизации?",
+            ["Ни разу", "Редко (1-2 раза было)", "Да, регулярно"],
+        )
+        q11_web_version = st.radio(
+            "11. Пользуетесь ли вы веб-версией заметок через браузер?",
+            ["Да", "Нет, только приложениями"],
+        )
 
-# ==========================================
-# ОТПРАВКА В БАЗУ ДАННЫХ
-# ==========================================
-if st.button("Отправить анкету"):
-    if name.strip() == "":
-        st.warning("Пожалуйста, заполните поле с вашим именем перед отправкой.")
-    else:
-        with st.spinner("Сохранение анкеты в Firebase..."):
-            try:
-                # Формируем полный пакет из 22 ответов
-                responses_data = {
-                    "user_id": st.session_state["user_id"],
-                    "name": name,
-                    "age": age,
-                    "git add app.pytimestamp": datetime.utcnow(),
-                    "q1": q1, "q2": q2, "q3": q3, "q4": q4, "q5": q5,
-                    "q6": q6, "q7": q7, "q8": q8, "q9": q9, "q10": q10,
-                    "q11": q11, "q12": q12, "q13": q13, "q14": q14, "q15": q15,
-                    "q16": q16, "q17": q17, "q18": q18, "q19": q19, "q20": q20,
-                    "q21": q21, "q22": q22
+        st.markdown("---")
+
+        # === БЛОК 3: МЕТРИКА «СОВМЕСТНАЯ РАБОТА» (Вопросы 12-16) ===
+        st.markdown("### 👥 Часть 3: Метрика «Совместная работа»")
+        q12_collab_frequency = st.radio(
+            "12. Как часто вы делитесь заметками с другими людьми?",
+            ["Никогда", "Редко (для личных нужд)", "Постоянно по учебе/работе"],
+        )
+        q13_features = st.multiselect(
+            "13. Какие командные функции вы реально используете? (Можно несколько):",
+            [
+                "Общие папки / блокноты",
+                "Одновременный онлайн-формат редактирования",
+                "Теги и упоминания (@пользователь)",
+                "Оставление комментариев к тексту",
+            ],
+        )
+        # Если ничего не выбрано, запишем дефолт
+        if not q13_features:
+            q13_features = ["Не использую"]
+
+        q14_export = st.radio(
+            "14. Важен ли для вас экспорт заметок в PDF, Markdown или DOCX?",
+            ["Очень важен", "Иногда полезен", "Вообще не нужен"],
+        )
+        q15_comments_needed = st.radio(
+            "15. Раздражает ли вас, когда другие меняют структуру вашей заметки?",
+            ["Да", "Нейтрально", "Мы работаем слаженно"],
+        )
+        q16_links = st.radio(
+            "16. Создаете ли вы публичные веб-ссылки на свои заметки?",
+            ["Часто делюсь ссылками", "Редко", "Никогда"],
+        )
+
+        st.markdown("---")
+
+        # === БЛОК 4: МЕТРИКА «БЕЗОПАСНОСТЬ И ХРАНЕНИЕ» (Вопросы 17-22) ===
+        st.markdown("### 🛡️ Часть 4: Метрика «Безопасность»")
+        q17_trust_level = st.slider(
+            "17. Насколько вы доверяете облачному провайдеру хранение личных мыслей? (1-10):",
+            1,
+            10,
+            7,
+        )
+        q18_sensitive_data = st.radio(
+            "18. Храните ли вы в заметках пароли, пин-коды или сканы документов?",
+            [
+                "Нет, никогда",
+                "Храню под паролем/биометрией внутри приложения",
+                "Да, храню в открытом виде",
+            ],
+        )
+        q19_2fa = st.radio(
+            "19. Включена ли у вас двухфакторная аутентификация (2FA) на аккаунте заметок?",
+            ["Да", "Нет", "Не знаю, что это"],
+        )
+        q20_backup = st.radio(
+            "20. Делаете ли вы резервные копии (бэкапы) заметок на флешку или ПК?",
+            ["Делаю регулярно", "Редко", "Никогда, доверяю облаку"],
+        )
+        q21_login_method = st.selectbox(
+            "21. Как вы обычно входите в приложение на телефоне?",
+            ["По биометрии (FaceID/Fingerprint)", "По ПИН-коду", "Без пароля"],
+        )
+        q22_feedback = st.text_area(
+            "22. Опишите главный плюс или минус вашего текущего сервиса заметок (свободный ответ):"
+        )
+
+        submit_btn = st.form_submit_button("🔥 Отправить масштабную анкету")
+
+        if submit_btn:
+            if not q1_city:
+                st.warning("Пожалуйста, заполните вопрос №1 (Укажите ваш город)!")
+            else:
+                # Упаковываем все 22 ответа в один словарь для Firestore
+                mega_record = {
+                    "city": q1_city,
+                    "age": int(q2_age),
+                    "occupation": q3_occupation,
+                    "primary_app": q4_primary_app,
+                    "experience": q5_experience,
+                    "frequency": q6_frequency,
+                    "devices": int(q7_devices),
+                    "offline_need": q8_offline,
+                    "sync_speed": int(q9_sync_speed),
+                    "sync_errors": q10_sync_errors,
+                    "web_version": q11_web_version,
+                    "collab_frequency": q12_collab_frequency,
+                    "features": q13_features,
+                    "export_importance": q14_export,
+                    "structure_irritation": q15_comments_needed,
+                    "public_links": q16_links,
+                    "trust_level": int(q17_trust_level),
+                    "sensitive_data": q18_sensitive_data,
+                    "two_factor": q19_2fa,
+                    "backup_policy": q20_backup,
+                    "login_method": q21_login_method,
+                    "feedback": q22_feedback,
+                    "submitted_at": datetime.utcnow(),
                 }
 
-                # Запись в Firebase Firestore
-                db.collection("responses").document(st.session_state["user_id"]).set(responses_data)
-                st.success("🎉 Ура! Все 22 вопроса и профиль успешно сохранены в Firebase!")
+                try:
+                    # Сохраняем в Firebase в новую коллекцию для больших опросов
+                    db.collection("mega_cloud_notes").add(mega_record)
+                    st.success(
+                        "Ура! Все 22 ответа успешно улетели в базу данных Firestore! 🎉"
+                    )
+                except Exception as e:
+                    st.error(f"Ошибка сохранения: {e}")
 
-            except Exception as e:
-                st.error(f"❌ Произошла ошибка отправки: {e}")
+# --- ПРАВАЯ КОЛОНКА: ПРОДВИНУТЫЙ ДАШБОРД ---
+with col_dash:
+    st.subheader("📊 Аналитическая система (Instructor Dashboard)")
+    enable_dashboard = st.checkbox("Активировать аналитику реального времени")
+
+    if enable_dashboard:
+        # Тянем данные из Firebase
+        docs = db.collection("mega_cloud_notes").stream()
+        raw_data = [doc.to_dict() for doc in docs]
+
+        if raw_data:
+            df = pd.DataFrame(raw_data)
+
+            # Общие метрики
+            st.metric(label="📊 Всего заполнено анкет в БД:", value=len(df))
+
+            # Табличный просмотр сырых ответов
+            with st.expander("👀 Посмотреть сырую таблицу ответов (первые 5 строк)"):
+                st.dataframe(df.head(5), use_container_width=True)
+
+            st.markdown("### 📈 Анализ ключевых метрик темы")
+
+            # График 1: Популярность приложений (Демография)
+            st.markdown("**Какими приложениями чаще всего пользуются:**")
+            fig1 = px.bar(
+                df,
+                x="primary_app",
+                color="primary_app",
+                title="Популярность сервисов заметок",
+            )
+            st.plotly_chart(fig1, use_container_width=True)
+
+            # График 2: Доверие и Безопасность (Метрика Безопасность)
+            st.markdown("**Уровень доверия облаку (Вопрос №17):**")
+            fig2 = px.histogram(
+                df,
+                x="trust_level",
+                nbins=10,
+                color_discrete_sequence=["#059669"],
+                labels={"trust_level": "Оценка доверия"},
+            )
+            fig2.update_layout(bargap=0.1)
+            st.plotly_chart(fig2, use_container_width=True)
+
+            # График 3: Скорость синхронизации (Метрика Синхронизация)
+            st.markdown(
+                "**Связь возраста и оценки скорости синхронизации (Scatter Plot):**"
+            )
+            fig3 = px.scatter(
+                df,
+                x="age",
+                y="sync_speed",
+                size="devices",
+                color="primary_app",
+                hover_data=["city"],
+            )
+            st.plotly_chart(fig3, use_container_width=True)
+
+            # График 4: Использование совместной работы
+            st.markdown("**Частота шеринга заметок (Вопрос №12):**")
+            fig4 = px.pie(
+                df,
+                names="collab_frequency",
+                hole=0.4,
+                color_discrete_sequence=px.colors.qualitative.Pastel,
+            )
+            st.plotly_chart(fig4, use_container_width=True)
+
+        else:
+            st.info(
+                "База данных пока пуста. Заполните и отправьте анкету слева, чтобы графики построились! 😎"
+            )
