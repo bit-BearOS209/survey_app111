@@ -1,30 +1,23 @@
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
-import json
 import os
 import uuid
 from datetime import datetime
-import pandas as pd  # Добавлено для работы дашборда
-import plotly.express as px  # Добавлено для графиков
+import pandas as pd
+import plotly.express as px
 
 # ==========================================
-# УНИВЕРСАЛЬНОЕ ПОДКЛЮЧЕНИЕ: ФАЙЛ ИЛИ SECRETS
+# ИНИЦИАЛИЗАЦИЯ ЧЕРЕЗ ТЕКСТОВЫЙ ФАЙЛ КЛЮЧА
 # ==========================================
 if not firebase_admin._apps:
     try:
-        # 1. Сначала проверяем, загрузился ли файл ключа на сервер
-        if os.path.exists("serviceAccountKey.json"):
-            cred = credentials.Certificate("serviceAccountKey.json")
+        # В облаке и локально файл теперь называется одинаково и лежит в корне
+        if os.path.exists("firebase_key.txt"):
+            cred = credentials.Certificate("firebase_key.txt")
             firebase_admin.initialize_app(cred)
-        # 2. Если файла нет, берем запасной вариант из Secrets
         else:
-            raw_json = st.secrets["FIREBASE_JSON_RAW"]
-            firebase_config = json.loads(raw_json)
-            if "private_key" in firebase_config:
-                firebase_config["private_key"] = firebase_config["private_key"].replace("\\n", "\n")
-            cred = credentials.Certificate(firebase_config)
-            firebase_admin.initialize_app(cred)
+            st.error("Файл 'firebase_key.txt' не найден на сервере!")
     except Exception as e:
         st.error(f"Критическая ошибка конфигурации Firebase: {e}")
 
