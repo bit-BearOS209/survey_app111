@@ -2,24 +2,27 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 import json
+import os
 import uuid
 from datetime import datetime
 
 # ==========================================
-# БЕЗОПАСНАЯ ИНИЦИАЛИЗАЦИЯ ИЗ RAW JSON СТРОКИ
+# УНИВЕРСАЛЬНОЕ ПОДКЛЮЧЕНИЕ: ФАЙЛ ИЛИ SECRETS
 # ==========================================
 if not firebase_admin._apps:
     try:
-        # Достаем текст из секретов
-        raw_json = st.secrets["FIREBASE_JSON_RAW"]
-        firebase_config = json.loads(raw_json)
-
-        # Принудительно чиним экранированные переносы строк для PEM-валидатора
-        if "private_key" in firebase_config:
-            firebase_config["private_key"] = firebase_config["private_key"].replace("\\n", "\n")
-
-        cred = credentials.Certificate(firebase_config)
-        firebase_admin.initialize_app(cred)
+        # 1. Сначала проверяем, загрузился ли файл ключа на сервер
+        if os.path.exists("serviceAccountKey.json"):
+            cred = credentials.Certificate("serviceAccountKey.json")
+            firebase_admin.initialize_app(cred)
+        # 2. Если файла нет, берем запасной вариант из Secrets
+        else:
+            raw_json = st.secrets["FIREBASE_JSON_RAW"]
+            firebase_config = json.loads(raw_json)
+            if "private_key" in firebase_config:
+                firebase_config["private_key"] = firebase_config["private_key"].replace("\\n", "\n")
+            cred = credentials.Certificate(firebase_config)
+            firebase_admin.initialize_app(cred)
     except Exception as e:
         st.error(f"Критическая ошибка конфигурации Firebase: {e}")
 
