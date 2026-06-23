@@ -5,6 +5,8 @@ import json
 import os
 import uuid
 from datetime import datetime
+import pandas as pd  # Добавлено для работы дашборда
+import plotly.express as px  # Добавлено для графиков
 
 # ==========================================
 # УНИВЕРСАЛЬНОЕ ПОДКЛЮЧЕНИЕ: ФАЙЛ ИЛИ SECRETS
@@ -134,7 +136,6 @@ with col_form:
                 "Оставление комментариев к тексту",
             ],
         )
-        # Если ничего не выбрано, запишем дефолт
         if not q13_features:
             q13_features = ["Не использую"]
 
@@ -191,7 +192,6 @@ with col_form:
             if not q1_city:
                 st.warning("Пожалуйста, заполните вопрос №1 (Укажите ваш город)!")
             else:
-                # Упаковываем все 22 ответа в один словарь для Firestore
                 mega_record = {
                     "city": q1_city,
                     "age": int(q2_age),
@@ -219,11 +219,8 @@ with col_form:
                 }
 
                 try:
-                    # Сохраняем в Firebase в новую коллекцию для больших опросов
                     db.collection("mega_cloud_notes").add(mega_record)
-                    st.success(
-                        "Ура! Все 22 ответа успешно улетели в базу данных Firestore! 🎉"
-                    )
+                    st.success("Ура! Все 22 ответа успешно улетели в базу данных Firestore! 🎉")
                 except Exception as e:
                     st.error(f"Ошибка сохранения: {e}")
 
@@ -233,69 +230,42 @@ with col_dash:
     enable_dashboard = st.checkbox("Активировать аналитику реального времени")
 
     if enable_dashboard:
-        # Тянем данные из Firebase
-        docs = db.collection("mega_cloud_notes").stream()
-        raw_data = [doc.to_dict() for doc in docs]
+        # ЗАЩИЩЕННЫЙ БЛОК ЗАГРУЗКИ ДАННЫХ
+        raw_data = []
+        try:
+            docs = db.collection("mega_cloud_notes").stream()
+            raw_data = [doc.to_dict() for doc in docs]
+        except Exception as e:
+            st.error(f"Ошибка авторизации или таймаут базы: {e}")
+            st.info("Пожалуйста, выполните REBOOT приложения в панели управления Streamlit Cloud, чтобы сбросить кэш токенов Google.")
 
         if raw_data:
             df = pd.DataFrame(raw_data)
 
-            # Общие метрики
             st.metric(label="📊 Всего заполнено анкет в БД:", value=len(df))
 
-            # Табличный просмотр сырых ответов
             with st.expander("👀 Посмотреть сырую таблицу ответов (первые 5 строк)"):
                 st.dataframe(df.head(5), use_container_width=True)
 
             st.markdown("### 📈 Анализ ключевых метрик темы")
 
-            # График 1: Популярность приложений (Демография)
             st.markdown("**Какими приложениями чаще всего пользуются:**")
-            fig1 = px.bar(
-                df,
-                x="primary_app",
-                color="primary_app",
-                title="Популярность сервисов заметок",
-            )
+            fig1 = px.bar(df, x="primary_app", color="primary_app", title="Популярность сервисов заметок")
             st.plotly_chart(fig1, use_container_width=True)
 
-            # График 2: Доверие и Безопасность (Метрика Безопасность)
             st.markdown("**Уровень доверия облаку (Вопрос №17):**")
-            fig2 = px.histogram(
-                df,
-                x="trust_level",
-                nbins=10,
-                color_discrete_sequence=["#059669"],
-                labels={"trust_level": "Оценка доверия"},
-            )
+            fig2 = px.histogram(df, x="trust_level", nbins=10, color_discrete_sequence=["#059669"], labels={"trust_level": "Оценка доверия"})
             fig2.update_layout(bargap=0.1)
             st.plotly_chart(fig2, use_container_width=True)
 
-            # График 3: Скорость синхронизации (Метрика Синхронизация)
-            st.markdown(
-                "**Связь возраста и оценки скорости синхронизации (Scatter Plot):**"
-            )
-            fig3 = px.scatter(
-                df,
-                x="age",
-                y="sync_speed",
-                size="devices",
-                color="primary_app",
-                hover_data=["city"],
-            )
+            st.markdown("**Связь возраста и оценки скорости синхронизации (Scatter Plot):**")
+            fig3 = px.scatter(df, x="age", y="sync_speed", size="devices", color="primary_app", hover_data=["city"])
             st.plotly_chart(fig3, use_container_width=True)
 
-            # График 4: Использование совместной работы
             st.markdown("**Частота шеринга заметок (Вопрос №12):**")
-            fig4 = px.pie(
-                df,
-                names="collab_frequency",
-                hole=0.4,
-                color_discrete_sequence=px.colors.qualitative.Pastel,
-            )
+            fig4 = px.pie(df, names="collab_frequency", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
             st.plotly_chart(fig4, use_container_width=True)
-
+        elif not raw_data and not enable_dashboard:
+            pass
         else:
-            st.info(
-                "База данных пока пуста. Заполните и отправьте анкету слева, чтобы графики построились! 😎"
-            )
+            st.info("База данных пока пуста или недоступна. Заполните и отправьте анкету слева!")
