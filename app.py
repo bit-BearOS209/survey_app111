@@ -5,11 +5,18 @@ import json
 import uuid
 from datetime import datetime
 
+# ==========================================
+# БЕЗОПАСНАЯ ИНИЦИАЛИЗАЦИЯ ИЗ RAW JSON СТРОКИ
+# ==========================================
 if not firebase_admin._apps:
     try:
-        # Сайт в облаке будет брать текст прямо из настроек Secrets
+        # Достаем текст из секретов
         raw_json = st.secrets["FIREBASE_JSON_RAW"]
         firebase_config = json.loads(raw_json)
+
+        # Принудительно чиним экранированные переносы строк для PEM-валидатора
+        if "private_key" in firebase_config:
+            firebase_config["private_key"] = firebase_config["private_key"].replace("\\n", "\n")
 
         cred = credentials.Certificate(firebase_config)
         firebase_admin.initialize_app(cred)
