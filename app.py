@@ -1,22 +1,20 @@
-from datetime import datetime
-import os
+import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
-import pandas as pd
-import plotly.express as px
-import streamlit as st
-
-# 1. Инициализация Firebase
-KEY_PATH = os.getenv("FIREBASE_KEY", "serviceAccountKey.json")
+import json
+import uuid
+from datetime import datetime
 
 if not firebase_admin._apps:
-    if not os.path.exists(KEY_PATH):
-        st.error(
-            "Ошибка: Файл serviceAccountKey.json не найден в папке приложения."
-        )
-        st.stop()
-    cred = credentials.Certificate(KEY_PATH)
-    firebase_admin.initialize_app(cred)
+    try:
+        # Сайт в облаке будет брать текст прямо из настроек Secrets
+        raw_json = st.secrets["FIREBASE_JSON_RAW"]
+        firebase_config = json.loads(raw_json)
+
+        cred = credentials.Certificate(firebase_config)
+        firebase_admin.initialize_app(cred)
+    except Exception as e:
+        st.error(f"Критическая ошибка конфигурации Firebase: {e}")
 
 db = firestore.client()
 
