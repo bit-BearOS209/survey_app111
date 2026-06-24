@@ -6,33 +6,47 @@ from datetime import datetime
 import pandas as pd
 import plotly.express as px
 
+# Переменная для проверки статуса базы
+db = None
+
 # ==========================================
-# ИНИЦИАЛИЗАЦИЯ НАПРЯМУЮ ИЗ TOML SECRETS
+# ИНИЦИАЛИЗАЦИЯ НАПРЯМУЮ ИЗ TOML SECRETS С ДИАГНОСТИКОЙ
 # ==========================================
 if not firebase_admin._apps:
     try:
-        # Собираем словарь прямо из отдельных полей Стримлита
-        firebase_config = {
-            "type": st.secrets["type"],
-            "project_id": st.secrets["project_id"],
-            "private_key_id": st.secrets["private_key_id"],
-            "private_key": st.secrets["private_key"],
-            "client_email": st.secrets["client_email"],
-            "client_id": st.secrets["client_id"],
-            "auth_uri": st.secrets["auth_uri"],
-            "token_uri": st.secrets["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": st.secrets["client_x509_cert_url"],
-            "universe_domain": st.secrets["universe_domain"]
-        }
+        # Проверяем, заполнил ли ты Secrets вообще
+        if not st.secrets:
+            st.error("⚠️ Внимание: Панель Secrets в Streamlit Cloud абсолютно пустая!")
+        else:
+            # Проверяем наличие главного поля
+            if "private_key" not in st.secrets:
+                st.error("⚠️ В Secrets нет поля 'private_key'! Проверь правильность названий.")
 
-        # Передаем готовый словарь в Firebase
-        cred = credentials.Certificate(firebase_config)
-        firebase_admin.initialize_app(cred)
+            # Собираем словарь из Secrets
+            firebase_config = {
+                "type": st.secrets.get("type", "service_account"),
+                "project_id": st.secrets.get("project_id", ""),
+                "private_key_id": st.secrets.get("private_key_id", ""),
+                "private_key": st.secrets.get("private_key", ""),
+                "client_email": st.secrets.get("client_email", ""),
+                "client_id": st.secrets.get("client_id", ""),
+                "auth_uri": st.secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
+                "token_uri": st.secrets.get("token_uri", "https://oauth2.googleapis.com/token"),
+                "auth_provider_x509_cert_url": st.secrets.get("auth_provider_x509_cert_url", ""),
+                "client_x509_cert_url": st.secrets.get("client_x509_cert_url", ""),
+                "universe_domain": st.secrets.get("universe_domain", "googleapis.com")
+            }
+
+            # Попытка авторизации
+            cred = credentials.Certificate(firebase_config)
+            firebase_admin.initialize_app(cred)
+            db = firestore.client()
+
     except Exception as e:
-        st.error(f"Критическая ошибка конфигурации Firebase: {e}")
-
-db = firestore.client()
+        st.error(f"❌ Ошибка внутри блока инициализации: {e}")
+        st.info("Это означает, что формат твоего private_key в Secrets не нравится библиотеке криптографии.")
+else:
+    db = firestore.client()
 
 # ==========================================
 # КОНФИГУРАЦИЯ СТРАНИЦЫ
