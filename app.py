@@ -6,28 +6,39 @@ from datetime import datetime
 import pandas as pd
 import plotly.express as px
 
-# Переменная для проверки статуса базы
 db = None
 
 # ==========================================
-# ИНИЦИАЛИЗАЦИЯ НАПРЯМУЮ ИЗ TOML SECRETS С ДИАГНОСТИКОЙ
+# ИНИЦИАЛИЗАЦИЯ С АВТО-КОРРЕКЦИЕЙ СЛЭШЕЙ
 # ==========================================
 if not firebase_admin._apps:
     try:
-        # Проверяем, заполнил ли ты Secrets вообще
         if not st.secrets:
             st.error("⚠️ Внимание: Панель Secrets в Streamlit Cloud абсолютно пустая!")
         else:
-            # Проверяем наличие главного поля
-            if "private_key" not in st.secrets:
-                st.error("⚠️ В Secrets нет поля 'private_key'! Проверь правильность названий.")
+            # Читаем ключ из Secrets
+            pk = st.secrets.get("private_key", "")
 
-            # Собираем словарь из Secrets
+            # 🔥 ЖЕСТКИЙ ФИКС ОШИБКИ InvalidByte(0, 92):
+            # Если слэши затроили или превратились в текст, чиним их
+            if pk:
+                # Уничтожаем виндусовые переносы, если они есть
+                pk = pk.replace("\r", "")
+                # Заменяем текстовые комбинации '\n' (слэш + n) на реальный перенос строки Linux
+                pk = pk.replace("\\n", "\n")
+                # Убираем случайные двойные слэши
+                pk = pk.replace("\\", "")
+
+                # Проверяем и восстанавливаем маркеры, если они склеились
+                if "-----BEGIN PRIVATE KEY-----" in pk and "-----END PRIVATE KEY-----" in pk:
+                    lines = [line.strip() for line in pk.split("\n") if line.strip()]
+                    pk = "\n".join(lines)
+
             firebase_config = {
                 "type": st.secrets.get("type", "service_account"),
                 "project_id": st.secrets.get("project_id", ""),
                 "private_key_id": st.secrets.get("private_key_id", ""),
-                "private_key": st.secrets.get("private_key", ""),
+                "private_key": pk,  # Отдаем исправленный ключ
                 "client_email": st.secrets.get("client_email", ""),
                 "client_id": st.secrets.get("client_id", ""),
                 "auth_uri": st.secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
@@ -37,14 +48,12 @@ if not firebase_admin._apps:
                 "universe_domain": st.secrets.get("universe_domain", "googleapis.com")
             }
 
-            # Попытка авторизации
             cred = credentials.Certificate(firebase_config)
             firebase_admin.initialize_app(cred)
             db = firestore.client()
 
     except Exception as e:
         st.error(f"❌ Ошибка внутри блока инициализации: {e}")
-        st.info("Это означает, что формат твоего private_key в Secrets не нравится библиотеке криптографии.")
 else:
     db = firestore.client()
 
