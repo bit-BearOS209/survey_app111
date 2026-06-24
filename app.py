@@ -14,13 +14,9 @@ if firebase_admin._apps:
     firebase_admin.delete_app(firebase_admin.get_app())
 
 try:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    KEY_PATH = os.path.join(BASE_DIR, "firebase_key.txt")
-    if os.path.exists(KEY_PATH):
-        cred = credentials.Certificate(KEY_PATH)
-        firebase_admin.initialize_app(cred)
-    else:
-        st.error(f"Файл ключа не найден: {KEY_PATH}")
+    key_dict = dict(st.secrets["firebase_key"])
+    cred = credentials.Certificate(key_dict)
+    firebase_admin.initialize_app(cred)
 except Exception as e:
     st.error(f"Критическая ошибка конфигурации Firebase: {e}")
 
