@@ -1,24 +1,44 @@
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
+import json
 import os
+import uuid
 from datetime import datetime
 import pandas as pd
 import plotly.express as px
 
 # ==========================================
-# ИНИЦИАЛИЗАЦИЯ FIREBASE
+# ИНИЦИАЛИЗАЦИЯ С АВТО-СПАСЕНИЕМ КЛЮЧА
 # ==========================================
-# Сбрасываем старое соединение принудительно
-if firebase_admin._apps:
-    firebase_admin.delete_app(firebase_admin.get_app())
+if not firebase_admin._apps:
+    try:
+        if os.path.exists("firebase_key.txt"):
+            # Читаем файл как обычный текст
+            with open("firebase_key.txt", "r", encoding="utf-8") as f:
+                config_text = f.read()
 
-try:
-    key_dict = dict(st.secrets["firebase_key"])
-    cred = credentials.Certificate(key_dict)
-    firebase_admin.initialize_app(cred)
-except Exception as e:
-    st.error(f"Критическая ошибка конфигурации Firebase: {e}")
+            # Превращаем текст в словарь
+            firebase_config = json.loads(config_text)
+
+            # 🔥 ЖЕСТКИЙ ФИКС ДЛЯ СЕРВЕРА СТРИМЛИТ:
+            # Если разрывы строк превратились в физические переносы,
+            # мы экранируем их обратно, чтобы библиотека cryptography не ругалась.
+            if "private_key" in firebase_config:
+                pk = firebase_config["private_key"]
+                # Убираем возможные системные дубликаты переносов и заменяем на правильный PEM-формат
+                pk = pk.replace("\n", "\\n").replace("\\n\\n", "\\n")
+                # Восстанавливаем корректные маркеры начала и конца ключа
+                pk = pk.replace("-----BEGIN\\nPRIVATE\\nKEY-----", "-----BEGIN PRIVATE KEY-----")
+                pk = pk.replace("-----END\\nPRIVATE\\nKEY-----", "-----END PRIVATE KEY-----")
+                firebase_config["private_key"] = pk
+
+            cred = credentials.Certificate(firebase_config)
+            firebase_admin.initialize_app(cred)
+        else:
+            st.error("Файл 'firebase_key.txt' не найден на сервере!")
+    except Exception as e:
+        st.error(f"Критическая ошибка конфигурации Firebase: {e}")
 
 db = firestore.client()
 
